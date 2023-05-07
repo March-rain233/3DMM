@@ -8,12 +8,14 @@ from lib.MorphabelModel import MorphabelModel as Model
 from lib.Renderer import Renderer
 
 def main():
-    m = Model('model\model2019_fullHead.h5')
+    m = Model('model\BFM.mat')
     v, c = m.transform()
+    indices = m.tri.flatten()
     scale = np.max(np.max(v, axis=0)-np.min(v, axis=0))
     v/=scale
+    c[m.kptInd] = [0,0,1]
     r = Renderer()
-    r.SetModel(v, c, m.tl.flatten())
+    r.SetModel(v, c, indices)
     r.show()
     # cap = cv2.VideoCapture(0) 
     # detector = dlib.get_frontal_face_detector()
