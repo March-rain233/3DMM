@@ -7,7 +7,7 @@ import numpy as np
 
 class Renderer:
     def __init__(self, **kwds):
-        self.csize = kwds.get('size', (960, 640))       # 画布分辨率
+        self.csize = kwds.get('size', (640, 640))       # 画布分辨率
         self.bg = kwds.get('bg', [0.0, 0.0, 0.0])       # 背景色
         self.haxis = kwds.get('haxis', 'y').lower()     # 高度轴
         self.oecs = kwds.get('oecs', [0.0, 0.0, 0.0])   # 视点坐标系ECS原点
@@ -46,10 +46,39 @@ class Renderer:
         self.specular = 1.0                                         # 镜面反射系数
         self.diffuse = 0.7                                          # 漫反射系数
         self.pellucid = 0.5                                         # 透光度
+        self.beforeDraw = None
+        self.compare = None
+        self.vertices = None
 
     def draw(self):
+        glViewport(0,0,int(self.csize[0]*2), self.csize[1])
+        glBegin(GL_LINES)
+        glColor3f(1,1,1)
+        glVertex2fv((0,-2))
+        glVertex2fv((0,2))
+        glEnd()
+
+        glViewport(int(self.csize[0]),0,int(self.csize[0]), self.csize[1])
+        if not self.compare is None:
+            h, w = self.compare.shape[:2]
+            glEnable(GL_TEXTURE_2D)
+            glBindTexture(GL_TEXTURE_2D, glGenTextures(1))
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, self.compare)
+            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+            glBegin(GL_QUADS)
+            glTexCoord2f(0.0, 1.0);glVertex2f(-1.0, -1.0)
+            glTexCoord2f(1.0, 1.0);glVertex2f(1.0, -1.0)
+            glTexCoord2f(1.0, 0.0);glVertex2f(1.0, 1.0)
+            glTexCoord2f(0.0, 0.0);glVertex2f(-1.0, 1.0)
+            glEnd()
+
+        if self.vertices is None:
+            return
+        glViewport(0,0,int(self.csize[0]), self.csize[1])
+
         glUseProgram(self.program)
-    
+
         loc = glGetAttribLocation(self.program, 'a_Position')
         self.vertices.bind()
         glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, 3*4, self.vertices)
@@ -109,7 +138,8 @@ class Renderer:
 
     def render(self):
         """重绘事件函数"""
-
+        if not self.beforeDraw is None:
+            self.beforeDraw()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT) # 清除屏幕及深度缓存
         self.draw() # 绘制模型
         glutSwapBuffers() # 交换缓冲区
@@ -125,9 +155,9 @@ class Renderer:
         glutInit() # 初始化glut库
 
         sw, sh = glutGet(GLUT_SCREEN_WIDTH), glutGet(GLUT_SCREEN_HEIGHT)
-        left, top = (sw-self.csize[0])//2, (sh-self.csize[1])//2
+        left, top = (sw-self.csize[0]*2)//2, (sh-self.csize[1])//2
 
-        glutInitWindowSize(*self.csize) # 设置窗口大小
+        glutInitWindowSize(self.csize[0]*2, self.csize[1]) # 设置窗口大小
         glutInitWindowPosition(left, top) # 设置窗口位置
         glutCreateWindow('Data View Toolkit') # 创建窗口
         
@@ -143,9 +173,14 @@ class Renderer:
         glutMouseFunc(self.click) # 绑定鼠标按键和滚轮事件函数
         glutMotionFunc(self.drag) # 绑定鼠标拖拽事件函数
         
+        #glutIdleFunc(self.render)
+        def OnTimer(v):
+            glutPostRedisplay()
+            glutTimerFunc(5, OnTimer, 1)
+        glutTimerFunc(5, OnTimer, 1)
         glutMainLoop() # 进入glut主循环
 
-    def SetModel(self, vertices, colors, indices):
+    def setModel(self, vertices, colors, indices):
         self.vertices = vbo.VBO(vertices)
         self.colors = vbo.VBO(colors)
         self.indices = vbo.VBO(indices, target=GL_ELEMENT_ARRAY_BUFFER)
@@ -163,6 +198,9 @@ class Renderer:
         self.normal = vbo.VBO(temp)
         
         self.n = len(indices)
+
+    def setCompare(self, img):
+        self.compare = img
 
     def get_vmat(self):
         """返回视点矩阵"""
@@ -232,7 +270,7 @@ class Renderer:
     def reshape(self, w, h):
         """改变窗口大小事件函数"""
  
-        self.csize = (w, h)
+        self.csize = (int(w/2), h)
         self.aspect = self.csize[0]/self.csize[1] if self.csize[1] > 0 else 1e4
         glViewport(0, 0, self.csize[0], self.csize[1])
  
@@ -240,7 +278,9 @@ class Renderer:
 
     def click(self, btn, state, x, y):
         """鼠标按键和滚轮事件函数"""
- 
+        if x > self.csize[0]:
+            return
+        
         if btn == 0: # 左键
             if state == 0: # 按下
                 self.left_down = True
@@ -259,7 +299,9 @@ class Renderer:
 
     def drag(self, x, y):
         """鼠标拖拽事件函数"""
-        
+        #if x > self.csize[0]:
+            #return
+
         dx, dy = x - self.mouse_pos[0], y - self.mouse_pos[1]
         self.mouse_pos = (x, y)
 
