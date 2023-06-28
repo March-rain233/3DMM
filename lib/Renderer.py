@@ -39,13 +39,13 @@ class Renderer:
             self.fs = f.read()      #片元着色器代码
 
         # 设置光照参数
-        self.light_dir = np.array([-1, 1, 0], dtype=np.float32)     # 光线照射方向
+        self.light_dir = -np.array([1, 1, 1], dtype=np.float32)     # 光线照射方向
         self.light_color = np.array([1, 1, 1], dtype=np.float32)    # 光线颜色
-        self.ambient = np.array([0.2, 0.2, 0.2], dtype=np.float32)  # 环境光颜色
-        self.shiny = 50                                             # 高光系数
-        self.specular = 1.0                                         # 镜面反射系数
-        self.diffuse = 0.7                                          # 漫反射系数
-        self.pellucid = 0.5                                         # 透光度
+        self.ambient = np.array([0.1, 0.1, 0.1], dtype=np.float32)  # 环境光颜色
+        self.shiny = 100                                             # 高光系数
+        self.specular = 0.6                                         # 镜面反射系数
+        self.diffuse = 1                                          # 漫反射系数
+        self.pellucid = 0.6                                         # 透光度
         self.beforeDraw = None
         self.compare = None
         self.vertices = None
@@ -138,18 +138,19 @@ class Renderer:
 
     def render(self):
         """重绘事件函数"""
-        if not self.beforeDraw is None:
-            self.beforeDraw()
+        self.__beforeDraw()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT) # 清除屏幕及深度缓存
         self.draw() # 绘制模型
         glutSwapBuffers() # 交换缓冲区
 
+    def __beforeDraw(self):
+        if not self.beforeDraw is None:
+            self.beforeDraw()
 
     def prepare(self):
         vshader = shaders.compileShader(self.vs, GL_VERTEX_SHADER)
         fshader = shaders.compileShader(self.fs, GL_FRAGMENT_SHADER)
         self.program = shaders.compileProgram(vshader, fshader)
-
 
     def show(self):
         glutInit() # 初始化glut库
@@ -173,11 +174,12 @@ class Renderer:
         glutMouseFunc(self.click) # 绑定鼠标按键和滚轮事件函数
         glutMotionFunc(self.drag) # 绑定鼠标拖拽事件函数
         
-        #glutIdleFunc(self.render)
         def OnTimer(v):
+            self.__beforeDraw()
             glutPostRedisplay()
-            glutTimerFunc(5, OnTimer, 1)
-        glutTimerFunc(5, OnTimer, 1)
+            glutTimerFunc(1, OnTimer, 1)
+        #glutTimerFunc(1, OnTimer, 1)
+        glutIdleFunc(self.render)
         glutMainLoop() # 进入glut主循环
 
     def setModel(self, vertices, colors, indices):
@@ -266,6 +268,7 @@ class Renderer:
         else:
             self.cam = [d*np.sin(azim)+self.oecs[0], self.dist*np.sin(elev)+self.oecs[1], d*np.cos(azim)+self.oecs[2]]
             self.up = [0.0, up, 0.0]
+            #self.light_dir = np.array(self.cam)
 
     def reshape(self, w, h):
         """改变窗口大小事件函数"""
@@ -316,5 +319,5 @@ if __name__=='__main__':
     vs = np.array([[0, 1, 0], [-1, -1, 0], [1, -1, 0], [0,0,1]], dtype=np.float32)
     colos = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [0.333,0.333,0.333]], dtype=np.float32)
     indices = np.array([0,1,2, 0,2,3, 1,0,3, 2,1,3], dtype=np.int32)
-    r.SetModel(vs, colos, indices)
+    r.setModel(vs, colos, indices)
     r.show()

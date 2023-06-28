@@ -1,10 +1,13 @@
-import h5py
 import numpy as np
-import json
 import scipy.io as sio
+import torch
+import torchvision.transforms as transforms
+from lib.Model import FitModel as Model
+from math import cos, sin
+device = 'cpu'
 
 class MorphabelModel:
-    def __init__(self, filePath, maxIter=5):
+    def __init__(self, filePath, **kwarg):
         data = sio.loadmat(filePath)['model']
         self.shapeMU = data['shapeMU'][0, 0].flatten()          #平均人脸形状
         self.shapePC = data['shapePC'][0, 0]                    #形状主成分
@@ -22,23 +25,35 @@ class MorphabelModel:
         self.nSP = self.shapePC.shape[1]                        #形状主成分变量数
         self.nTP = self.texPC.shape[1]                          #纹理主成分变量数
         self.nEP = self.expPC.shape[1]                          #表情主成分变量数
-        self.sp = np.random.rand(self.nSP)*1e04                 #形状主成分变量
-        self.tp = np.random.rand(self.nTP)                      #纹理主成分变量
-        self.ep = -1.5 + 3*np.random.random(self.nEP)           #表情主成分变量
-        self.maxIter = maxIter                                  #最大迭代次数
+        self.sp = np.zeros(self.nSP)                            #形状主成分变量
+        self.tp = np.zeros(self.nTP)                            #纹理主成分变量
+        self.ep = np.zeros(self.nEP)                            #表情主成分变量
         self.shapeMU = self.shapeMU + self.expMU
+        self.p = np.eye(3)
+        self.t = np.zeros(3)
+        self.s = 1
 
     def transform(self):
-        return ((self.shapeMU 
-                  + self.shapePC @ self.sp 
-                  + self.expPC @ self.ep
-                  ).reshape(-1,3).astype(np.float32),
-                 ((self.texMU 
-                  + self.texPC @ self.tp
-                  ) / 255).reshape(-1, 3).astype(np.float32))
+        shape = self.shapePC @ self.sp
+        exp = self.expPC @ self.ep
+        face = self.shapeMU + shape + exp
+        face = face.reshape(-1, 3)
+        face = face @ self.p.T
+        face *= self.s
+        face = face + self.t
+        tex = ((self.texMU + self.texPC @ self.tp) / 255).reshape(-1, 3).astype(np.float32)
+        return face.astype(np.float32), tex.astype(np.float32)
     
-    def fit(self, kptPoints):
+    def fit(self, frame, kptPoints):
         '''校准'''
+        pass
+    
+class TraditionalMorphableModel(MorphabelModel):
+    def __init__(self, filePath, **kwargs):
+        super().__init__(filePath, **kwargs)
+        self.maxIter = kwargs['maxIter']  #最大迭代次数
+
+    def fit(self, frame, kptPoints):
         #截取特征点对应的参数
         indices = self.kptInd.astype(np.uint32) * 3
         indices = np.c_[indices, indices + 1, indices + 2].flatten()
@@ -46,25 +61,23 @@ class MorphabelModel:
         shapePC = self.shapePC[indices]
         expPC = self.expPC[indices]
 
-
         #迭代校准
         for i in range(self.maxIter):
-            sp = self.sp
-            ep = self.ep
-
             shape = shapePC @ self.sp
 
             x3d = (shapeMU + shape + expPC @ self.ep).reshape(-1, 3)
-            PA = self.__getPAffine(kptPoints, x3d)
+            PA = self.__getPAffine(kptPoints.T, x3d)
             s, R, t = self.__P2SRT(PA)
-            self.ep = self.__estimateExpression(kptPoints.T, shapeMU, expPC, self.expEV, shape.reshape(-1, 3).T, s, R, t[:2], 
-                                                lamb = 100).flatten()
+
+            self.p[:] = -R[...]
+            #self.t[:] = -t[:]
+
+            self.ep = self.__estimateExpression(kptPoints, shapeMU, expPC, self.expEV, shape.reshape(-1, 3).T, s, R, t[:2], 
+                                                lamb = 2000).flatten()
 
             exp = expPC @ self.ep
-            self.sp = self.__estimateShape(kptPoints.T, shapeMU, shapePC, self.shapeEV, exp.reshape(-1, 3).T, s, R, t[:2], 
-                                                lamb = 1).flatten()
-        #print(f'sp最大更改:{np.max(np.abs(self.sp - sp))}')
-        #print(f'np最大更改:{np.max(np.abs(self.ep - ep))}')
+            self.sp = self.__estimateShape(kptPoints, shapeMU, shapePC, self.shapeEV, exp.reshape(-1, 3).T, s, R, t[:2], 
+                                                lamb = 4000).flatten()
     
     def __getPAffine(self, x2d, x3d):
         '''获取仿射矩阵'''
@@ -128,107 +141,88 @@ class MorphabelModel:
         return s, R, t
 
     def __estimateExpression(self, x, shapeMU, expPC, expEV, shape, s, R, t2d, lamb):
-        '''
-        Args:
-            x: (2, n). image points (to be fitted)
-            shapeMU: (3n, 1)
-            expPC: (3n, n_ep)
-            expEV: (n_ep, 1)
-            shape: (3, n)
-            s: scale
-            R: (3, 3). rotation matrix
-            t2d: (2,). 2d translation
-            lambda: regulation coefficient
-
-        Returns:
-            exp_para: (n_ep, 1) shape parameters(coefficients)
-        '''
-        x = x.copy()
-        assert(shapeMU.shape[0] == expPC.shape[0])
-        assert(shapeMU.shape[0] == x.shape[1]*3)
-
-        dof = expPC.shape[1]
-
-        n = x.shape[1]
-        sigma = expEV
-        t2d = np.array(t2d)
-        P = np.array([[1, 0, 0], [0, 1, 0]], dtype = np.float32)
-        A = s*P.dot(R) #(2,3)
-
-        # --- calc pc
-        pc_3d = np.resize(expPC.T, [dof, n, 3]) 
-        pc_3d = np.reshape(pc_3d, [dof*n, 3]) # (29n,3)
-        pc_2d = pc_3d.dot(A.T) #(29n,2)
-        pc = np.reshape(pc_2d, [dof, -1]).T # 2n x 29
-
-        # --- calc b
-        # shapeMU
-        mu_3d = np.resize(shapeMU, [n, 3]).T # 3 x n
-        # expression
-        shape_3d = shape
-        # 
-        b = A.dot(mu_3d + shape_3d) + np.tile(t2d[:, np.newaxis], [1, n]) # 2 x n
-        b = np.reshape(b.T, [-1, 1]) # 2n x 1
-
-        # --- solve
-        equation_left = np.dot(pc.T, pc) + lamb * np.diagflat(1/sigma**2)
-        x = np.reshape(x.T, [-1, 1])
-        equation_right = np.dot(pc.T, x - b)
-
-        exp_para = np.dot(np.linalg.inv(equation_left), equation_right)
-
-        return exp_para
+        P = np.array([[1, 0, 0], [0, 1, 0]], dtype = np.float32)  # [2, 3]
+        A = s*P.dot(R)  # [2, 3]
+        pc = (expPC.T.reshape(-1, 3) @ A.T).reshape(expPC.shape[1], -1).T  # [2 * nver, exp_num]
+        b = A @ (shapeMU.reshape(-1, 3).T + shape) + t2d[:, None]  # [2, nver]
+        equation_left = pc.T @ pc + lamb * np.diagflat(1/expEV**2)  # [exp_num, exp_num]
+        equation_right = pc.T @ (x - b).T.flatten()  # [exp_num,]
+        return np.linalg.inv(equation_left) @ equation_right
 
     def __estimateShape(self, x, shapeMU, shapePC, shapeEV, expression, s, R, t2d, lamb):
-        '''
+        P = np.array([[1, 0, 0], [0, 1, 0]], dtype = np.float32)  # [2, 3]
+        A = s*P.dot(R)  # [2, 3]
+        pc = (shapePC.T.reshape(-1, 3) @ A.T).reshape(shapePC.shape[1], -1).T  # [2 * nver, shape_num]
+        b = A @ (shapeMU.reshape(-1, 3).T + expression) + t2d[:, None]  # [2, nver]
+        equation_left = pc.T @ pc + lamb * np.diagflat(1/shapeEV**2)  # [shape_num, shape_num]
+        equation_right = pc.T @ (x - b).T.flatten()  # [shape_num,]
+        return np.linalg.inv(equation_left) @ equation_right
+
+class MLMorphableModel(MorphabelModel):
+    def __init__(self, filePath, **kwarg):
+        super().__init__(filePath, **kwarg)
+        self.SHAPE_NUM = 40
+        self.EXP_NUM = 10
+        self.transforms = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=127.5, std=128)
+        ])
+        self.net = Model(self.SHAPE_NUM, self.EXP_NUM)
+        self.net.load_state_dict(torch.load(kwarg.get('modelPath', r'model\fit_model.pth')))
+        self.net.to(device)
+        self.net.eval()
+
+    def fit(self, frame, kptPoints):
+        with torch.no_grad():
+            kptPoints = kptPoints[:, 
+                                  ((0 <= kptPoints[0]) & (kptPoints[0] < frame.shape[1])) &
+                                  ((0 <= kptPoints[1]) & (kptPoints[1] < frame.shape[0]))
+                                  ]
+            frame = self.transforms(frame)[None,...].to(device)
+            flms = torch.full([1, 1, frame.shape[2], frame.shape[3]], -1, dtype=torch.float32, device=device)
+            flms[0, 0, kptPoints[1], kptPoints[0]] = 1
+            input = torch.cat([frame, flms], 1)
+            output = self.net(input).cpu()
+            self.sp[:self.SHAPE_NUM] = output[0,12:12+self.SHAPE_NUM]
+            self.ep[:self.EXP_NUM] = output[0,12+self.SHAPE_NUM:]
+            #self.p[:] = output[0,:9].reshape(3, 3)
+            #self.t[:] = output[0,9:12]
+
+class TestMorphableModel(MorphabelModel):
+    def __init__(self, filePath, **kwarg):
+        super().__init__(filePath, **kwarg)
+        label = sio.loadmat(kwarg.get('labelPath', r'data\train_data\LFPW\image_test_0002.mat'))
+        self.sp[:] = label['Shape_Para'][:,0]
+        self.ep[:] = label['Exp_Para'][:,0]
+        self.tp[:] = label['Tex_Para'][:,0]
+        pose = label['Pose_Para'][0]
+        pose[0] *= -1
+        self.p[:] = self.angle2matrix(pose[:3])
+        #self.t[:] = pose[3:6]
+        self.s = pose[6]
+    def angle2matrix(self, angles):
+        ''' get rotation matrix from three rotation angles(degree). right-handed.
         Args:
-            x: (2, n). image points (to be fitted)
-            shapeMU: (3n, 1)
-            shapePC: (3n, n_sp)
-            shapeEV: (n_sp, 1)
-            expression: (3, n)
-            s: scale
-            R: (3, 3). rotation matrix
-            t2d: (2,). 2d translation
-            lambda: regulation coefficient
-
+            angles: [3,]. x, y, z angles
+            x: pitch. positive for looking down.
+            y: yaw. positive for looking left. 
+            z: roll. positive for tilting head right. 
         Returns:
-            shape_para: (n_sp, 1) shape parameters(coefficients)
+            R: [3, 3]. rotation matrix.
         '''
-        x = x.copy()
-        assert(shapeMU.shape[0] == shapePC.shape[0])
-        assert(shapeMU.shape[0] == x.shape[1]*3)
+        x, y, z = angles[0], angles[1], angles[2]
+        # x
+        Rx=np.array([[1,      0,       0],
+                     [0, cos(x),  -sin(x)],
+                     [0, sin(x),   cos(x)]])
+        # y
+        Ry=np.array([[ cos(y), 0, sin(y)],
+                     [      0, 1,      0],
+                     [-sin(y), 0, cos(y)]])
+        # z
+        Rz=np.array([[cos(z), -sin(z), 0],
+                     [sin(z),  cos(z), 0],
+                     [     0,       0, 1]])
 
-        dof = shapePC.shape[1]
-
-        n = x.shape[1]
-        sigma = shapeEV
-        t2d = np.array(t2d)
-        P = np.array([[1, 0, 0], [0, 1, 0]], dtype = np.float32)
-        A = s*P.dot(R)
-
-        # --- calc pc
-        pc_3d = np.resize(shapePC.T, [dof, n, 3]) # 199 x n x 3
-        pc_3d = np.reshape(pc_3d, [dof*n, 3]) # 199n x 3
-        pc_2d = pc_3d.dot(A.T.copy()) # A.T 3 x 2  199 x n x 2
-
-        pc = np.reshape(pc_2d, [dof, -1]).T # 2n x 199
-
-        # --- calc b
-        # shapeMU
-        mu_3d = np.resize(shapeMU, [n, 3]).T # 3 x n
-        # expression
-        exp_3d = expression
-        # 
-        b = A.dot(mu_3d + exp_3d) + np.tile(t2d[:, np.newaxis], [1, n]) # 2 x n
-        b = np.reshape(b.T, [-1, 1]) # 2n x 1
-
-        # --- solve
-        equation_left = np.dot(pc.T, pc) + lamb * np.diagflat(1/sigma**2)
-        x = np.reshape(x.T, [-1, 1])
-        equation_right = np.dot(pc.T, x - b)
-
-        shape_para = np.dot(np.linalg.inv(equation_left), equation_right)
-
-        return shape_para
-            
+        R=Rz.dot(Ry.dot(Rx))
+        return R.astype(np.float32)
