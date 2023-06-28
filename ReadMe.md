@@ -1,5 +1,5 @@
 # 基于3DMM的人脸重构
-
+**注意**：由于github的markdown渲染器不支持多行公式，所以该文件的公式显示不全。如果想看正常的公式的话可以去装个浏览器插件或者查看doc文件夹下的ReadMe.pdf
 ## 演示视频
 
 [基于3DMM的三维人脸重建_哔哩哔哩_bilibili](https://www.bilibili.com/video/BV1La4y1c7Qg/?vd_source=634d041fcc65acb755d5224e2003cc9b)
