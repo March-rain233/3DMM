@@ -71,14 +71,17 @@ BFM模型：
 
 ### 3DMM
 ​	3DMM，即三维可变形人脸模型，是一个通用的三维人脸模型，用固定的点数来表示人脸。**它的核心思想就是人脸可以在三维空间中进行一一匹配，并且可以由其他许多幅人脸正交基加权线性相加而来**  
-<img src="https://imgconvert.csdnimg.cn/aHR0cHM6Ly9tbWJpei5xcGljLmNuL21tYml6X3BuZy9BbWpHYmZkT055bDN0ZDdyWThpY2x2VVdpYnlqaWJEYWtkZUlBZVp2ODNibGZVMGlieG1ic3JqeGtWWVFpY0tzb2ljamtFa1ZJTVNsdWZCZU9HVU5DSkFUWmVpY2cvNjQw?x-oss-process=image/format,png" alt="img" style="zoom:150%;" />
+<img src="D:\Program\AI\3DMM\${image}\format,png.png" alt="img" style="zoom:150%;" />
 ​	我们所处的三维空间，每一点(x,y,z)，实际上都是由三维空间三个方向的基量，(1,0,0)，(0,1,0)，(0,0,1)加权相加所得，只是权重分别为x,y,z。转换到三维空间，道理也一样。每一个三维的人脸，可以由一个数据库中的所有人脸组成的基向量空间中进行表示，而求解任意三维人脸的模型，实际上等价于求解各个基向量的系数的问题。人脸的基本属性包括形状、表情和纹理，每一张人脸可以表示为如下所示的形状向量、表情向量和纹理向量的线性叠加。
 $$
-S_{newModel} = \overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_iE_i\\
+S_{newModel} = \overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_iE_i
+$$
+
+$$
 T_{newModel} = \overline{T}+\sum_{i=1}^k\gamma_iT_i
 $$
 
-​	而其中平均人脸和各属性的主成分都是由数据库生成得来。因此，对于一张人脸图像的人脸重建问题就转变成为了求取形状与表情参数$\alpha$和$\beta$的问题  
+​	而其中平均人脸和各属性的主成分都是由数据库生成得来。因此，对于一张人脸图像的人脸重建问题就转变成为了求取形状与表情参数 $\alpha$ 和 $\beta$ 的问题  
 ​	以下为项目中生成人脸的部分代码
 
 ```python
@@ -140,20 +143,24 @@ class MorphabelModel:
 
 ​	老实讲我觉得这部分图形学知识很基础没啥讲的必要，但是我看蛮多3DMM相关的文章都有水这部分内容我就顺带也水一水这些知识，再补个渲染相关的凑凑字数（？  
 ​	为了对比我们建立的人脸和原始图像的相似关系，我们一般需要将顶点投影到二维坐标下来进行对比。我们求取出的人脸模型他的顶点坐标实际上是位于模型的本地坐标下，而为了把模型渲染回照片我们需要把模型变换到世界空间再变换到视图空间下再通过透视投影和齐次除法到NDC空间最后再转入屏幕空间。其中我们设定相机位于原点且透视投影为正交透视从而规避掉了大部分的变换过程，获得了以下简化的**3维坐标投影到图片坐标的映射关系**：
+
 $$
 \begin{aligned}
 X_{2d}&=s*P_{orth}*R*X_{3d}+t_{2d}\\\
 &=s*P_{orth}*R*(\overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_iE_i)+t_{2d}
 \end{aligned}
 $$
-​	其中s为缩放比，$P_{orth}=\begin{bmatrix}1&0&0\\0&1&0\end{bmatrix}$，$R$为旋转矩阵，$t_{2d}$为平移变换
+
+​	其中s为缩放比， $P_{orth}=\begin{bmatrix}1&0&0\\0&1&0\end{bmatrix}$ ， $R$ 为旋转矩阵， $t_{2d}$ 为平移变换
 
 ### 光照模型
 
 ​	本次项目用的是opengl的可编程渲染管线，我原先是为了说整些风格化渲染的花活所以用的可编程管线，不过迫于时间问题只填入了最基础的光照模型，本次实验的光照为
+
 $$
 光照=环境光+漫反射+高光反射
 $$
+
 **顶点着色器代码：**
 
 ```glsl
@@ -238,7 +245,7 @@ void main() {
 ​	只有当视线方向与光源的反射光线非常接近时（顶点到视点方向与入射光反方向关于顶点法向量对称），才能看到镜面反射的高光现象。此时，镜面反射光将会在反射方向附近形成亮且小的光斑。**高光指数越小**，表示物体表面**越粗糙**，反射光越分散，观察到的光斑区域**越小**，**强度弱**  
 ​	Blinn-Phong光照模型是是由Jim Blinn提出的对Phong模型的一种优化。Phong模型需要在每一片元都需要计算光的反射方向向量（这是比较消耗性能的），Blinn-Phong模型只需要计算视角方向和光源方向的和向量（归一化后被称为半角向量），这会得到一个更加柔和的高光显示  
 ​	同样的高光系数下，Blinn-Phong光照模型**高光领域覆盖范围较大**，**明暗界限不明显**。所以它真实感还没Phong模型强。但是这个模型运算速度要**快**些  
-​	在Phong模型中，必须计算V·R（ **视点方向 · 反射方向**）的值，但是在BlinnPhong模型中，用$N·H$（**法线方向 · 半角向量**）的值来取代$V·R$
+​	在Phong模型中，必须计算V·R（ **视点方向 · 反射方向**）的值，但是在BlinnPhong模型中，用 $N·H$ （**法线方向 · 半角向量**）的值来取代 $V·R$ 
 
 > BlinnPhong光照模型公式：  
 >$Ibp = Ks * Il * (N · H)^n$  
@@ -248,17 +255,19 @@ void main() {
 
 ## Analysis-by-Synthesis
 
-​	我们的目标是拿到一张人脸图像后寻找合适的参数拟合出人脸模型使得模型投影出的2d坐标与图像相近，在[前文](#坐标变换)我们已经推导出了模型向图像坐标系的投影公式$X_{2d}=s*P_{orth}*R*(\overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_iE_i)+t_{2d}$ 于是我们可以选取人脸的68个特征点，求解使得**三维模型中的68特征点投影到二维平面上的值与二维平面原68个特征点距离相差最小**的系数。根据最小二乘法，我们可以构建如下的最小化目标
+​	我们的目标是拿到一张人脸图像后寻找合适的参数拟合出人脸模型使得模型投影出的2d坐标与图像相近，在[前文](#坐标变换)我们已经推导出了模型向图像坐标系的投影公式 $X_{2d}=s*P_{orth}*R*(\overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_iE_i)+t_{2d}$ 于是我们可以选取人脸的68个特征点，求解使得**三维模型中的68特征点投影到二维平面上的值与二维平面原68个特征点距离相差最小**的系数。根据最小二乘法，我们可以构建如下的最小化目标
+
 $$
 arg\ min\ ||X_{2d}-X^*||^2+\lambda \sum_{i=1}(\frac{\gamma_i}{\sigma_i})^2
 $$
-​	这里加了正则化部分，其中$\gamma$是PCA系数（包括形状系数$\alpha$以及表情系数$\beta$），$\sigma$表示对应的主成分偏差  
-​	到此为止我们总结一下任务，即我们需要求解出系数（$s、R、t_{2d}、\alpha、\beta$）使得目标函数最小，就能得到与图像最相似的人脸模型。于是我们可以根据待定系数法设计出以下的最优化过程
 
-> 1. 将$\alpha$以及$\beta$初始化为0  
-> 2. 求出$s、R、t_{2d}$  
-> 3. 固定$\alpha、s、R、t_{2d}$求解$\beta$
-> 4. 固定$\beta、s、R、t_{2d}$求解$\alpha$
+​	这里加了正则化部分，其中 $\gamma$ 是PCA系数（包括形状系数 $\alpha$ 以及表情系数 $\beta$ ）， $\sigma$ 表示对应的主成分偏差  
+​	到此为止我们总结一下任务，即我们需要求解出系数（ $s、R、t_{2d}、\alpha、\beta$ ）使得目标函数最小，就能得到与图像最相似的人脸模型。于是我们可以根据待定系数法设计出以下的最优化过程
+
+> 1. 将 $\alpha$ 以及 $\beta$ 初始化为0  
+> 2. 求出 $s、R、t_{2d}$   
+> 3. 固定 $\alpha、s、R、t_{2d}$ 求解 $\beta$ 
+> 4. 固定 $\beta、s、R、t_{2d}$求解 $\alpha$ 
 > 5. 重复2-4步骤，迭代更新
 
 ​	**部分代码**
@@ -288,20 +297,22 @@ def fit(self, frame, kptPoints):
 
 ### **Gold Standard algorithm**
 
-​	如前文所说，我们在第二步需要求解变换参数$s、R、t_{2d}$，他们表示了如何将三维坐标映射到二维坐标，而这一过程同样可以由一个3x4的仿射矩阵$P_{Affine}$（后文简写为$P$）来实现：
+​	如前文所说，我们在第二步需要求解变换参数 $s、R、t_{2d}$ ，他们表示了如何将三维坐标映射到二维坐标，而这一过程同样可以由一个3x4的仿射矩阵 $P_{Affine}$ （后文简写为 $P$ ）来实现：
+
 $$
 X_{2d}=P_{Affine}X_{3d}
 $$
-​	于是，求解$s、R、t_{2d}$的问题可以转变为先求解$P$，再由$P$分解为$s、R、t_{2d}$ 
+
+​	于是，求解 $s、R、t_{2d}$ 的问题可以转变为先求解 $P$ ，再由 $P$ 分解为 $s、R、t_{2d}$  
 ![这里写图片描述](https://img-blog.csdn.net/20180804203538959?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xpa2V3aW5kMTk5Mw==/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
 
 ​	**算法描述如下**
 
-> 1. 归一化，对于二维点（$x_i$），计算一个相似变换$T$，使得$\tilde{x}=Tx_i$，同样的对于三维点，计算$\tilde{X}=UX_i$
-> 2. 对于每组对应点$x_i~X_i$，都有$\begin{bmatrix}\tilde{X_i^T}&0^T\\0^T&\tilde{X_i^T}\end{bmatrix}\begin{pmatrix}\tilde{P^1}\\\tilde{P^2}\end{pmatrix}=\begin{pmatrix}\tilde{x_i}\\\tilde{y_i}\end{pmatrix}$，形同$Ax=b$
+> 1. 归一化，对于二维点（ $x_i$ ），计算一个相似变换$T$，使得 $\tilde{x}=Tx_i$ ，同样的对于三维点，计算 $\tilde{X}=UX_i$ 
+> 2. 对于每组对应点 $x_i~X_i$ ，都有 $\begin{bmatrix}\tilde{X_i^T}&0^T\\0^T&\tilde{X_i^T}\end{bmatrix}\begin{pmatrix}\tilde{P^1}\\\tilde{P^2}\end{pmatrix}=\begin{pmatrix}\tilde{x_i}\\\tilde{y_i}\end{pmatrix}$ ，形同 $Ax=b$ 
 > 3. 求解A的伪逆
-> 4. 去除归一化，得到仿射矩阵$P$
-> 5. 将$P$分解出$s、R、t_{2d}$
+> 4. 去除归一化，得到仿射矩阵 $P$ 
+> 5. 将 $P$ 分解出 $s、R、t_{2d}$ 
 
 ​	**部分代码**
 
@@ -373,15 +384,17 @@ def __P2SRT(self, P):
     return s, R, t
 ```
 
-### 求解$\alpha和\beta$
+### 求解 $\alpha$ 和 $\beta$ 
 
-​	如前文所述，当我们求解完变换参数后，就需要依次固定$\alpha$和$\beta$求解相对的参数，下面我们将推导如何求取$\beta$ 
-​	已知公式$X_{2d}=s*P_{orth}*R*(\overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_iE_i)+t_{2d}$ 
+​	如前文所述，当我们求解完变换参数后，就需要依次固定 $\alpha$ 和 $\beta$ 求解相对的参数，下面我们将推导如何求取 $\beta$ 
+​	已知公式 $X_{2d}=s*P_{orth}*R*(\overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_iE_i)+t_{2d}$  
+
 $$
 定义:\begin{cases}A=s*P_{orth}*R\\pc=A*\sum_{i=1}^nE_i\\b=A*(\overline{S}+\sum_{i=1}^{m}\alpha_iS_i)+t_{2d}\end{cases}
 $$
 
 ​	将上述定义带入可推导得  
+
 $$
 \begin{aligned}
 X_{2d}&=s*P_{orth}*R*(\overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_iE_i)+t_{2d}\\
@@ -391,17 +404,22 @@ X_{2d}&=s*P_{orth}*R*(\overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_i
 $$
 
 ​	我们将上述公式代入目标函数得
+
 $$
 \begin{aligned}
 Loss=&||X_{2d}-X^*||^2+\lambda \sum_{i=1}(\frac{\gamma_i}{\sigma_i})^2\\
 =&||pc·\beta+b-X^*||^2+\lambda \sum_{i=1}(\frac{\gamma_i}{\sigma_i})^2
 \end{aligned}
 $$
-​	对$\beta$求偏导得
+
+​	对 $\beta$ 求偏导得
+
 $$
 \frac{\partial Loss}{\partial \beta}=2pc^T·(pc·\beta+b-X^*)+2\lambda\frac{\beta}{\sigma^T·\sigma}
 $$
-​	令偏导为0即可求得$\beta$
+
+​	令偏导为0即可求得 $\beta$ 
+
 $$
 \begin{aligned}
 2pc^T·(pc·\beta+b-X^*)+2\lambda\frac{\beta}{\sigma^T·\sigma}&=0\\
@@ -409,7 +427,8 @@ $$
 \beta&=(pc^T·pc+\frac{\lambda}{\sigma^T·\sigma})^{-1}·pc^T·(X^*-b)
 \end{aligned}
 $$
-​	同理我们也可以得到$\alpha$​的求解公式，通过多次迭代即可求出相应的解  
+
+​	同理我们也可以得到 $\alpha$ 的求解公式，通过多次迭代即可求出相应的解  
 ​	**部分代码**
 
 ```python
@@ -456,8 +475,8 @@ def __estimateShape(self, x, shapeMU, shapePC, shapeEV, expression, s, R, t2d, l
 ​	因为在回归多个参数的任务中，一般假设得到的参数服从多元正态分布（隐含条件为参数部分以原点为均值，在原点两侧分布），因此在进行训练的时候，得到的参数可能会比label更加靠近原点（如果过于靠近原点，那么得到的人脸模型往往会与平均人脸模型相似）， 因此在进行训练的时候，不仅仅要满足得到的参数值与label相近，也要满足得到的参数值尽可能远离原点，这样才能得到更具特征的人脸。  
 ​	损失函数里的两个Loss项代表着:
 
-1. over-estimate：当预测得到的值相较于label比原点更远，$\lambda_1=1$，占较小的权重
-2. under-estimate：即预测得到的值相较于label比原点更近，$\lambda_2=3$，占较大的权重
+1. over-estimate：当预测得到的值相较于label比原点更远， $\lambda_1=1$ ，占较小的权重
+2. under-estimate：即预测得到的值相较于label比原点更近， $\lambda_2=3$ ，占较大的权重
 
 **部分代码**  
 
@@ -495,10 +514,12 @@ class CustomLoss(nn.Module):
 
 ​	输出：*f*尺度因子，t平移向量，Π由9个参数构成的投影矩阵，40个人脸形状表示参数，10个人脸表情参数，共62个参数。
 
-​	我们回顾一下先前的知识，对于一张人脸图片来说它对应的人脸可以表示为$S = \overline{S}+A_s\alpha_s+A_{exp}\alpha_{exp}$，而将人脸映射到二维图像坐标系可以通过$V=f*Pr*\Pi*S+t$（此处的公式与上文不同是因为我采用了论文中对应的符号，你们对照的看就行），因此我们归纳一下所需要获得的参数有*f*尺度因子，t平移向量，Π投影矩阵，$\alpha_s$人脸形状参数（选取前40个），$\alpha_{exp}$人脸表情参数（选取前10个），将这些组合起来就得到了我们需要回归的参数
+​	我们回顾一下先前的知识，对于一张人脸图片来说它对应的人脸可以表示为 $S = \overline{S}+A_s\alpha_s+A_{exp}\alpha_{exp}$ ，而将人脸映射到二维图像坐标系可以通过 $V=f*Pr*\Pi*S+t$ （此处的公式与上文不同是因为我采用了论文中对应的符号，你们对照的看就行），因此我们归纳一下所需要获得的参数有*f*尺度因子，t平移向量，Π投影矩阵， $\alpha_s$ 人脸形状参数（选取前40个）， $\alpha_{exp}$ 人脸表情参数（选取前10个），将这些组合起来就得到了我们需要回归的参数
+
 $$
 \alpha=[f,t,\Pi,\alpha_s,\alpha_{exp}]
 $$
+
 ​	从上面的图像我们可以得知2DASL有两条训练路线分别使用两组图像训练模型，即具有3DMM ground truth的2D图像和仅具有2D面部特征点注释的2D面部图像（2D特征点利用已有的特征点检测算法得到）。 通过最小化以下一个传统的3D监督函数和四个自监督损失来训练该模型。
 
 ​	**损失函数计算部分代码**
@@ -555,17 +576,17 @@ def l2dcon(x, y):
 
 #### Weighted 3DMM coefficient supervision
 
-​	这个传统的3D监督函数是Weighted 3DMM coefficient supervision，其用来测量模型预测的3DMM系数的准确度。利用ground truth的3DMM系数监督模型的训练，以此使得模型预测的系数$\hat{\alpha}$更接近ground truth系数$\alpha^*$。此外作者还明确地考虑每个系数的重要性，并相应地重新衡量它们对损失计算的贡献。这样得到weighted coefficient prediction loss：
+​	这个传统的3D监督函数是Weighted 3DMM coefficient supervision，其用来测量模型预测的3DMM系数的准确度。利用ground truth的3DMM系数监督模型的训练，以此使得模型预测的系数 $\hat{\alpha}$ 更接近ground truth系数 $\alpha^*$ 。此外作者还明确地考虑每个系数的重要性，并相应地重新衡量它们对损失计算的贡献。这样得到weighted coefficient prediction loss：
 
 ![img](https://img-blog.csdnimg.cn/20190427205807364.PNG?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3poYW5ncGFuZzA2,size_16,color_FFFFFF,t_70)
 
-​	其中，$\omega_i$表示第i个系数的重要性 ，根据投影后2D特征点位置引入的误差计算。$H(·)$表示3D shape投影，$\hat{\alpha}_i$表示的是第i个系数来自$\hat{\alpha}$而其他的系数来自$\alpha^*$。作者这样做的原因是，通过引入这样一个重新加权方案，在模型训练期间，CNN模型将首先关注学习权重较大的系数（例如，用于旋转和平移的系数）。在减少误差和权重后，模型再优化其他系数（例如identity和expression的系数）。（其实就是借鉴了坐标下降法的思想)。
+​	其中， $\omega_i$ 表示第i个系数的重要性 ，根据投影后2D特征点位置引入的误差计算。 $H(·)$ 表示3D shape投影， $\hat{\alpha}_i$ 表示的是第i个系数来自 $\hat{\alpha}$ 而其他的系数来自 $\alpha^*$ 。作者这样做的原因是，通过引入这样一个重新加权方案，在模型训练期间，CNN模型将首先关注学习权重较大的系数（例如，用于旋转和平移的系数）。在减少误差和权重后，模型再优化其他系数（例如identity和expression的系数）。（其实就是借鉴了坐标下降法的思想)。
 
 #### 2D assisted selfsupervised learning
 
-​	由于3D数据的不足，想要充分利用2D图像进行训练（这些图像可以通过特征点检测算法得到稀疏的2D特征点），就必须要引入新颖的自监督方案，这也是此篇论文的出发点之一。自监督方案包含有三种不同的自监督损失，包括2D特征点一致性损失$L_{2d-con}$，3D特征点一致性损失$L_{3d-con}$和循环一致性损失（cycle-consistency)$L_{cyc}$。 
+​	由于3D数据的不足，想要充分利用2D图像进行训练（这些图像可以通过特征点检测算法得到稀疏的2D特征点），就必须要引入新颖的自监督方案，这也是此篇论文的出发点之一。自监督方案包含有三种不同的自监督损失，包括2D特征点一致性损失 $L_{2d-con}$ ，3D特征点一致性损失 $L_{3d-con}$ 和循环一致性损失（cycle-consistency) $L_{cyc}$ 。 
 
-​	我们可以这样理解这三个损失，直观上如果网络模型足够好的话，那它应该保证三种一致性：1）以原始2D特征点$X_{2d}$作为模型输入，将模型预测得到的3D特征点$X_{3d}$投影会得到2D特征点$Y_{2d}$,投影得到的2D特征点与模型的输入的2D特征点$X_{2d}$要尽可能接近的；2）反过来，如果将$Y_{2d}$输入模型，那预测到的3D特征点与$X_{3d}$也是要非常接近的；3）接着如果对$\hat{X}_{3d}$做投影得到的$\hat{X}_{2d}$应该与$X_{2d}$一致。这样就形成了循环一致性。
+​	我们可以这样理解这三个损失，直观上如果网络模型足够好的话，那它应该保证三种一致性：1）以原始2D特征点 $X_{2d}$ 作为模型输入，将模型预测得到的3D特征点 $X_{3d}$ 投影会得到2D特征点 $Y_{2d}$ ,投影得到的2D特征点与模型的输入的2D特征点 $X_{2d}$ 要尽可能接近的；2）反过来，如果将 $Y_{2d}$ 输入模型，那预测到的3D特征点与 $X_{3d}$ 也是要非常接近的；3）接着如果对 $\hat{X}_{3d}$ 做投影得到的 $\hat{X}_{2d}$ 应该与 $X_{2d}$ 一致。这样就形成了循环一致性。
 
 ![img](https://img-blog.csdnimg.cn/20190428200539546.PNG?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3poYW5ncGFuZzA2,size_16,color_FFFFFF,t_70)
 
@@ -573,11 +594,11 @@ def l2dcon(x, y):
 
 #### Self-critic learning
 
-​	（我只实现了真实数据的训练，这一部分无标签数据的训练我没进行）接着进一步引入了一种自评估（self-critic），用“in-the-wild”2D人脸图像来弱化监督模型训练。这一部分就是整个网络框架的第三个模块，这一模块的输入有两个人脸图像集，一个没有任何3D注释$I=\{I_1,\dots,I_n\}$,一个带有ground truth的3DMM系数$J=\{(J_1,\alpha^*),\dots,(J_m,\alpha_m^*)\}$，CNN回归模型会预测$I_i$的3DMM系数$\alpha_i$。将两组图像输入，经过encoder之后得到图像的$\tilde{z}$，然后结合对应的3DMM系数通过一个判别器。此模块需要优化一个损失函数：
+​	（我只实现了真实数据的训练，这一部分无标签数据的训练我没进行）接着进一步引入了一种自评估（self-critic），用“in-the-wild”2D人脸图像来弱化监督模型训练。这一部分就是整个网络框架的第三个模块，这一模块的输入有两个人脸图像集，一个没有任何3D注释 $I=\{I_1,\dots,I_n\}$ ,一个带有ground truth的3DMM系数 $J=\{(J_1,\alpha^*),\dots,(J_m,\alpha_m^*)\}$ ，CNN回归模型会预测 $I_i$ 的3DMM系数 $\alpha_i$ 。将两组图像输入，经过encoder之后得到图像的 $\tilde{z}$ ，然后结合对应的3DMM系数通过一个判别器。此模块需要优化一个损失函数：
 
 ![image-20230628151245918](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628151245918.png)
 
-​	至此，整体损失函数为$L=L_{3d}+\lambda_1L_{2d-con}+\lambda_2L_{3d-con}+\lambda_3L_{cyc}+\lambda_4L_{sc}$
+​	至此，整体损失函数为 $L=L_{3d}+\lambda_1L_{2d-con}+\lambda_2L_{3d-con}+\lambda_3L_{cyc}+\lambda_4L_{sc}$ 
 
 # 结果
 
