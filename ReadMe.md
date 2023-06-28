@@ -71,8 +71,10 @@ BFM模型：
 
 ### 3DMM
 ​	3DMM，即三维可变形人脸模型，是一个通用的三维人脸模型，用固定的点数来表示人脸。**它的核心思想就是人脸可以在三维空间中进行一一匹配，并且可以由其他许多幅人脸正交基加权线性相加而来**  
-<img src="D:\Program\AI\3DMM\${image}\format,png.png" alt="img" style="zoom:150%;" />
+<img src=".\image\format,png.png" alt="img" style="zoom:150%;" />
 ​	我们所处的三维空间，每一点(x,y,z)，实际上都是由三维空间三个方向的基量，(1,0,0)，(0,1,0)，(0,0,1)加权相加所得，只是权重分别为x,y,z。转换到三维空间，道理也一样。每一个三维的人脸，可以由一个数据库中的所有人脸组成的基向量空间中进行表示，而求解任意三维人脸的模型，实际上等价于求解各个基向量的系数的问题。人脸的基本属性包括形状、表情和纹理，每一张人脸可以表示为如下所示的形状向量、表情向量和纹理向量的线性叠加。
+
+
 $$
 S_{newModel} = \overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_iE_i
 $$
@@ -304,7 +306,7 @@ X_{2d}=P_{Affine}X_{3d}
 $$
 
 ​	于是，求解 $s、R、t_{2d}$ 的问题可以转变为先求解 $P$ ，再由 $P$ 分解为 $s、R、t_{2d}$  
-![这里写图片描述](https://img-blog.csdn.net/20180804203538959?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xpa2V3aW5kMTk5Mw==/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+![这里写图片描述](.\image\70.jpeg)
 
 ​	**算法描述如下**
 
@@ -388,7 +390,6 @@ def __P2SRT(self, P):
 
 ​	如前文所述，当我们求解完变换参数后，就需要依次固定 $\alpha$ 和 $\beta$ 求解相对的参数，下面我们将推导如何求取 $\beta$ 
 ​	已知公式 $X_{2d}=s*P_{orth}*R*(\overline{S}+\sum_{i=1}^{m}\alpha_iS_i+\sum_{i=1}^n\beta_iE_i)+t_{2d}$  
-
 $$
 定义:\begin{cases}A=s*P_{orth}*R\\pc=A*\sum_{i=1}^nE_i\\b=A*(\overline{S}+\sum_{i=1}^{m}\alpha_iS_i)+t_{2d}\end{cases}
 $$
@@ -462,15 +463,15 @@ def __estimateShape(self, x, shapeMU, shapePC, shapeEV, expression, s, R, t2d, l
 
 ​	有人提出借助CNN对图像强大的特征提取能力，来对3DMM系数进行估计的想法，在2017年的CVPR中，“Regressing robust and discriminative 3D morphable models with a very deep neural network.”，这篇论文便使用Resnet-101进行3DMM系数的估计。
 
-![在这里插入图片描述](https://img-blog.csdnimg.cn/cdc19d1a2658467d940f4d7542e3b966.png)
+![在这里插入图片描述](.\image\cdc19d1a2658467d940f4d7542e3b966.png)
 
 ​	这篇论文主要解决了两个问题，一个是训练数据不足而从没有3dmm参数的图片生成数据集，一个是生成更具有鲁棒性的人脸。由于我在实验中使用的是已经带有参数的人脸数据集所以我略去了生成数据的这个步骤，更着重于利用resnet回归3dmm参数的部分  
 ​	论文通过将人脸图像直接传入修改了最后一层连接层的ResNet-101网络来回归198维的人脸形状参数，而这篇论文相对于直接回归做出的改进在于他设计了一个损失函数而不是直接使用MSE  
 ​	作者提出了一个非对称欧拉损失，使模型学习到更多的细节特征，使三维人脸模型具有更多的区别性，公式如下：
 
-![在这里插入图片描述](https://img-blog.csdnimg.cn/a089343203a949ec815bdbfacfef90a7.png)
+![在这里插入图片描述](.\image\a089343203a949ec815bdbfacfef90a7.png)
 
-![在这里插入图片描述](https://img-blog.csdnimg.cn/207f7f4be2474cad9e1573feca2c8149.png)
+![在这里插入图片描述](.\image\207f7f4be2474cad9e1573feca2c8149.png)
 
 ​	因为在回归多个参数的任务中，一般假设得到的参数服从多元正态分布（隐含条件为参数部分以原点为均值，在原点两侧分布），因此在进行训练的时候，得到的参数可能会比label更加靠近原点（如果过于靠近原点，那么得到的人脸模型往往会与平均人脸模型相似）， 因此在进行训练的时候，不仅仅要满足得到的参数值与label相近，也要满足得到的参数值尽可能远离原点，这样才能得到更具特征的人脸。  
 ​	损失函数里的两个Loss项代表着:
@@ -506,7 +507,7 @@ class CustomLoss(nn.Module):
 2. 其中发明了一种“自我评估训练”（self-critic）的方法能够有效地提升模型的学习质量（后文可知类似于GAN网络），尽管标注的野生的数据可能有噪声
 3. 在AFLW2000-3D数据集和AFLW-LFPA数据集上的实验表明本文的方法对于人脸重建与稠密人脸对齐都有比较好的效果
 
-![frame](https://img-blog.csdnimg.cn/202103192041530.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzQzNDIwNTMw,size_16,color_FFFFFF,t_70)
+![frame](.\image\watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzQzNDIwNTMw,size_16,color_FFFFFF,t_70.png)
 
 ​	网络构成：CNN Regressor为ResNet-50，Encoder包含6个卷积层，每个卷积层后面是ReLU和最大池化层。critic由4个完全连接层构成，分别由512、1024、1024、1个神经元组成，接着一个softmax层，获得输入对的一致性程度得分。
 
@@ -520,7 +521,7 @@ $$
 \alpha=[f,t,\Pi,\alpha_s,\alpha_{exp}]
 $$
 
-​	从上面的图像我们可以得知2DASL有两条训练路线分别使用两组图像训练模型，即具有3DMM ground truth的2D图像和仅具有2D面部特征点注释的2D面部图像（2D特征点利用已有的特征点检测算法得到）。 通过最小化以下一个传统的3D监督函数和四个自监督损失来训练该模型。
+​	从上面的图像我们可以得知2DASL有两条训练路线分别使用两组图像训练模型，即具有3DMM ground truth的2D图像和仅具有2D面部特征点注释的2D面部图像（2D特征点利用已有的特征点检测算法得到）。 通过最小化以下的一个传统的3D监督函数和四个自监督损失来训练该模型。
 
 ​	**损失函数计算部分代码**
 
@@ -578,7 +579,7 @@ def l2dcon(x, y):
 
 ​	这个传统的3D监督函数是Weighted 3DMM coefficient supervision，其用来测量模型预测的3DMM系数的准确度。利用ground truth的3DMM系数监督模型的训练，以此使得模型预测的系数 $\hat{\alpha}$ 更接近ground truth系数 $\alpha^*$ 。此外作者还明确地考虑每个系数的重要性，并相应地重新衡量它们对损失计算的贡献。这样得到weighted coefficient prediction loss：
 
-![img](https://img-blog.csdnimg.cn/20190427205807364.PNG?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3poYW5ncGFuZzA2,size_16,color_FFFFFF,t_70)
+![img](.\image\watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3poYW5ncGFuZzA2,size_16,color_FFFFFF,t_70-1687954921833-26.png)
 
 ​	其中， $\omega_i$ 表示第i个系数的重要性 ，根据投影后2D特征点位置引入的误差计算。 $H(·)$ 表示3D shape投影， $\hat{\alpha}_i$ 表示的是第i个系数来自 $\hat{\alpha}$ 而其他的系数来自 $\alpha^*$ 。作者这样做的原因是，通过引入这样一个重新加权方案，在模型训练期间，CNN模型将首先关注学习权重较大的系数（例如，用于旋转和平移的系数）。在减少误差和权重后，模型再优化其他系数（例如identity和expression的系数）。（其实就是借鉴了坐标下降法的思想)。
 
@@ -586,17 +587,23 @@ def l2dcon(x, y):
 
 ​	由于3D数据的不足，想要充分利用2D图像进行训练（这些图像可以通过特征点检测算法得到稀疏的2D特征点），就必须要引入新颖的自监督方案，这也是此篇论文的出发点之一。自监督方案包含有三种不同的自监督损失，包括2D特征点一致性损失 $L_{2d-con}$ ，3D特征点一致性损失 $L_{3d-con}$ 和循环一致性损失（cycle-consistency) $L_{cyc}$ 。 
 
-​	我们可以这样理解这三个损失，直观上如果网络模型足够好的话，那它应该保证三种一致性：1）以原始2D特征点 $X_{2d}$ 作为模型输入，将模型预测得到的3D特征点 $X_{3d}$ 投影会得到2D特征点 $Y_{2d}$ ,投影得到的2D特征点与模型的输入的2D特征点 $X_{2d}$ 要尽可能接近的；2）反过来，如果将 $Y_{2d}$ 输入模型，那预测到的3D特征点与 $X_{3d}$ 也是要非常接近的；3）接着如果对 $\hat{X}_{3d}$ 做投影得到的 $\hat{X}_{2d}$ 应该与 $X_{2d}$ 一致。这样就形成了循环一致性。
+​	我们可以这样理解这三个损失，直观上如果网络模型足够好的话，那它应该保证三种一致性：
 
-![img](https://img-blog.csdnimg.cn/20190428200539546.PNG?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3poYW5ncGFuZzA2,size_16,color_FFFFFF,t_70)
+1. 以原始2D特征点 $X_{2d}$ 作为模型输入，将模型预测得到的3D特征点 $X_{3d}$ 投影会得到2D特征点 $Y_{2d}$ ,投影得到的2D特征点与模型的输入的2D特征点 $X_{2d}$ 要尽可能接近的；
 
-![image-20230628150119443](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628150119443.png)
+2. 反过来，如果将 $Y_{2d}$ 输入模型，那预测到的3D特征点与 $X_{3d}$ 也是要非常接近的；
+
+3. 接着如果对 $\hat{X}_{3d}$ 做投影得到的 $\hat{X}_{2d}$ 应该与 $X_{2d}$ 一致。这样就形成了循环一致性。
+
+![img](.\image\watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3poYW5ncGFuZzA2,size_16,color_FFFFFF,t_70.png)
+
+![image-20230628150119443](.\image\image-20230628150119443.png)
 
 #### Self-critic learning
 
 ​	（我只实现了真实数据的训练，这一部分无标签数据的训练我没进行）接着进一步引入了一种自评估（self-critic），用“in-the-wild”2D人脸图像来弱化监督模型训练。这一部分就是整个网络框架的第三个模块，这一模块的输入有两个人脸图像集，一个没有任何3D注释 $I=\{I_1,\dots,I_n\}$ ,一个带有ground truth的3DMM系数 $J=\{(J_1,\alpha^*),\dots,(J_m,\alpha_m^*)\}$ ，CNN回归模型会预测 $I_i$ 的3DMM系数 $\alpha_i$ 。将两组图像输入，经过encoder之后得到图像的 $\tilde{z}$ ，然后结合对应的3DMM系数通过一个判别器。此模块需要优化一个损失函数：
 
-![image-20230628151245918](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628151245918.png)
+![image-20230628151245918](.\image\image-20230628151245918.png)
 
 ​	至此，整体损失函数为 $L=L_{3d}+\lambda_1L_{2d-con}+\lambda_2L_{3d-con}+\lambda_3L_{cyc}+\lambda_4L_{sc}$ 
 
@@ -606,9 +613,9 @@ def l2dcon(x, y):
 
 |                        数据集原生标签                        |                    Analysis-by-Synthesis                     |                            2DASL                             |
 | :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
-| ![image-20230628155547980](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628155547980.png) | ![](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628155305087.png) | ![image-20230628155724684](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628155724684.png) |
-| ![image-20230628162055719](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628162055719.png) | ![image-20230628161801435](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628161801435.png) | ![image-20230628162216893](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628162216893.png) |
-| ![image-20230628163450920](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628163450920.png) | ![image-20230628163226343](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628163226343.png) | ![image-20230628163712012](C:\Users\14621\AppData\Roaming\Typora\typora-user-images\image-20230628163712012.png) |
+| ![image-20230628155547980](.\image\image-20230628155547980.png) |           ![](.\image\image-20230628155305087.png)           | ![image-20230628155724684](.\image\image-20230628155724684.png) |
+| ![image-20230628162055719](.\image\image-20230628162055719.png) | ![image-20230628161801435](.\image\image-20230628161801435.png) | ![image-20230628162216893](.\image\image-20230628162216893.png) |
+| ![image-20230628163450920](.\image\image-20230628163450920.png) | ![image-20230628163226343](.\image\image-20230628163226343.png) | ![image-20230628163712012](.\image\image-20230628163712012.png) |
 
 ## 实时重构
 
