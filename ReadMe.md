@@ -2,7 +2,7 @@
 
 ## 演示视频
 
-
+[基于3DMM的三维人脸重建_哔哩哔哩_bilibili](https://www.bilibili.com/video/BV1La4y1c7Qg/?vd_source=634d041fcc65acb755d5224e2003cc9b)
 
 ## 成员列表
 
@@ -58,7 +58,9 @@ BFM模型：
 
 ## 运行帮助
 
-
+1. 下载https://pan.baidu.com/s/1AnBNYe6_CcaC0R8t8YBgSQ?pwd=r22i （提取码：r22i）下的文件，放入根目录的model文件下（如果没有该文件夹请自己创建）
+2. 训练模型，运行bin\train.py（训练时间会非常久，建议直接使用我传上网盘已经训练好的fit_model.pth）
+3. 运行bin\run.py进行测试
 
 ---
 
@@ -624,6 +626,8 @@ def l2dcon(x, y):
 ## 实时重构
 
 （采用的Analysis-by-Synthesis）
+
+![实时展示](./image/实时展示.gif)
 
 # 总结和讨论
 
